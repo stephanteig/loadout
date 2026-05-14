@@ -24,6 +24,11 @@ dist-ssr
 *.sln
 *.sw?
 
+# Docker backend secrets and runtime volumes
+supabase/docker/.env
+supabase/docker/volumes/storage/
+supabase/docker/volumes/logs/
+
 # Logs
 logs
 *.log
