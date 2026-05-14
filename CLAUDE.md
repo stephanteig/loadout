@@ -2,12 +2,13 @@
 
 ## Status tracker
 
-> Last updated: 2026-05-14. Local path: `/Users/Stephan/Documents/Dev/loadout/`
+> Last updated: 2026-05-14. Local path: `~/Dev/loadout/`
 
 | Phase | PR | Branch | Status |
 |-------|----|--------|--------|
 | 0 | Scaffold | `main` | ✅ Done |
-| 1 | PR 1 — Auth | `feat/auth` | ⬜ **Next** |
+| 0b | Docker Compose setup | `chore/docker-setup` | ⬜ **Next** |
+| 1 | PR 1 — Auth | `feat/auth` | ⬜ Pending |
 | 1 | PR 2 — Workspace create | `feat/workspace-create` | ⬜ Pending |
 | 1 | PR 3 — Workspace invite | `feat/workspace-invite` | ⬜ Pending |
 | 2 | PR 4 — Gear list | `feat/gear-list` | ⬜ Pending |
@@ -23,12 +24,11 @@
 | 6 | PR 14 — Polish | `chore/polish` | ⬜ Pending |
 
 ### Scaffold — what was done in Phase 0
-- Vite + React 18 + Tailwind v4 + Supabase + Zustand + React Router + VitePWA installed
+- Vite + React 18 + Tailwind v4 + Supabase JS client + Zustand + React Router + VitePWA installed
 - `vite.config.js`, `src/lib/supabase.js`, `src/index.css` configured
 - Migration SQL in `supabase/migrations/` (001, 002, 003)
 - Full directory structure scaffolded
 - GitHub repo created and pushed to `main`
-- `.env.local.example` — copy to `.env.local` and add Supabase credentials before running
 
 ### Starting a new session — instructions for Claude Code
 Read this file in full, then check the status tracker above to find the next `⬜ **Next**` PR. Follow the Git discipline section exactly (branch → commits → PR → stop, do not merge).
@@ -37,17 +37,48 @@ Read this file in full, then check the status tracker above to find the next `�
 
 ## Project overview
 
-Loadout is a PWA for camera gear inventory, kit template management, and shoot day planning. Built for filmmakers and photographers to log equipment, build reusable kit templates, and plan shoots with packing checklists.
+Loadout is a PWA for camera gear inventory, kit template management, and shoot day planning.
 
-**Stack**: React 18 + Vite + Tailwind CSS + Supabase + Vercel
-**Repo**: Create a new GitHub repo called `loadout` under the authenticated user's account
-**Local path**: `~/dev/loadout/`
+**Frontend**: React 18 + Vite + Tailwind CSS, deployed to Vercel  
+**Backend**: Self-hosted Supabase stack via Docker Compose  
+**Local path**: `~/Dev/loadout/`  
+**Future deployment**: Azure Container Registry → Azure Container Apps
+
+The `@supabase/supabase-js` client is used in the frontend — identical API whether backend runs locally in Docker or in Azure.
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Frontend (Vercel)                                  │
+│  React + Vite + Tailwind                            │
+│  VITE_SUPABASE_URL → points to backend              │
+└───────────────────┬─────────────────────────────────┘
+                    │ HTTPS
+┌───────────────────▼─────────────────────────────────┐
+│  Docker Compose (local) / Azure Container Apps (prod)│
+│                                                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐  │
+│  │ Kong     │  │ GoTrue   │  │ PostgREST        │  │
+│  │ (API GW) │  │ (Auth)   │  │ (REST API)       │  │
+│  └──────────┘  └──────────┘  └──────────────────┘  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐  │
+│  │ Storage  │  │ Realtime │  │ Supabase Studio  │  │
+│  │ (images) │  │          │  │ (local only)     │  │
+│  └──────────┘  └──────────┘  └──────────────────┘  │
+│  ┌────────────────────────────────────────────────┐ │
+│  │  PostgreSQL                                    │ │
+│  └────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Git discipline — non-negotiable
 
-- The **first push** (initial scaffold) goes directly to `main`
+- The **first push** (initial scaffold) goes directly to `main` — already done
 - **Every single change after that** must be a Pull Request — no exceptions, no matter how small
 - Claude Code creates the branch, makes the commits, pushes the branch, and opens the PR
 - Claude Code never merges PRs — the developer reviews and merges manually
@@ -57,33 +88,107 @@ Loadout is a PWA for camera gear inventory, kit template management, and shoot d
 
 ---
 
-## Setup instructions (phase 0 — first push to main)
+## Environment variables
+
+### Frontend (`src/.env.local`) — never commit
 
 ```bash
-cd ~/dev
-npm create vite@latest loadout -- --template react
-cd loadout
-npm install
-npm install @supabase/supabase-js
-npm install -D tailwindcss @tailwindcss/vite
-npm install zustand react-router-dom
-npm install -D vite-plugin-pwa
-gh repo create loadout --public --source=. --remote=origin --push
+# Local development (Docker backend)
+VITE_SUPABASE_URL=http://localhost:8000
+VITE_SUPABASE_ANON_KEY=<anon-key-from-docker-setup>
+
+# Production (Azure — update when deploying)
+# VITE_SUPABASE_URL=https://api.loadout.yourdomain.com
+# VITE_SUPABASE_ANON_KEY=<azure-anon-key>
 ```
 
-After scaffold is pushed to main, all further work happens in PRs.
+Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to Vercel environment variables when deploying frontend. Point them at the Azure URL, not localhost.
+
+### Backend (`supabase/docker/.env`) — never commit
+
+```bash
+POSTGRES_PASSWORD=your-super-secret-postgres-password
+JWT_SECRET=your-super-secret-jwt-secret-at-least-32-chars
+ANON_KEY=<generate-with-jwt-tool>
+SERVICE_ROLE_KEY=<generate-with-jwt-tool>
+SITE_URL=http://localhost:3000
+ADDITIONAL_REDIRECT_URLS=https://your-vercel-app.vercel.app
+API_EXTERNAL_URL=http://localhost:8000
+```
 
 ---
 
-## Environment variables
+## Docker Compose setup (Phase 0b)
 
-Create `.env.local` (never commit this file):
-```
-VITE_SUPABASE_URL=your_supabase_project_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+Create `supabase/docker/` containing the self-hosted Supabase stack.
+
+### File: `supabase/docker/docker-compose.yml`
+
+Based on the official Supabase self-hosted Docker Compose. Key services:
+
+```yaml
+# Services (all official Supabase images from docker.io/supabase/)
+# - db          postgres:15 with custom init scripts
+# - kong        API gateway — exposes port 8000
+# - gotrue      Auth server — port 9999
+# - postgrest   REST API — port 3000 (internal only, routed via Kong)
+# - storage     File storage — port 5000 (internal only)
+# - realtime    WebSocket server — port 4000 (internal only)
+# - studio      Supabase Studio UI — port 3001 (local dev only)
+# - imgproxy    Image transformation — internal only
+# - meta        DB metadata — internal only
 ```
 
-Add both to Vercel environment variables when deploying.
+All services communicate on internal Docker network. Only Kong (8000) and Studio (3001) are exposed to host.
+
+### File: `supabase/docker/volumes/db/init/`
+
+Copy migration SQL files here so Postgres runs them on first start:
+- `00-initial-schema.sql` — from `supabase/migrations/001_init.sql`
+- `01-auth.sql` — from `supabase/migrations/002_rls_policies.sql`
+- `02-storage.sql` — from `supabase/migrations/003_storage.sql`
+
+### Generating JWT keys
+
+```bash
+# Use this node one-liner to generate keys, or use jwt.io
+node -e "
+const jose = require('jose');
+const secret = 'your-jwt-secret-at-least-32-chars';
+// generate anon and service_role JWTs with correct claims
+"
+```
+
+Or use the official Supabase JWT generator: https://supabase.com/docs/guides/self-hosting/docker#generate-api-keys
+
+### Commands
+
+```bash
+# Start all services
+cd supabase/docker
+docker compose up -d
+
+# View logs
+docker compose logs -f kong
+
+# Stop
+docker compose down
+
+# Reset database (destructive)
+docker compose down -v
+docker compose up -d
+
+# Run migrations manually (if containers are already up)
+docker compose exec db psql -U postgres -f /docker-entrypoint-initdb.d/00-initial-schema.sql
+```
+
+### Ports
+
+| Service | Local URL |
+|---------|-----------|
+| API Gateway (Kong) | http://localhost:8000 |
+| Supabase Studio | http://localhost:3001 |
+| PostgreSQL | localhost:5432 |
 
 ---
 
@@ -123,14 +228,27 @@ loadout/
 │   ├── main.jsx
 │   └── index.css
 ├── supabase/
-│   └── migrations/
-│       ├── 001_init.sql
-│       ├── 002_rls_policies.sql
-│       └── 003_storage.sql
-├── .env.local                  # never commit
+│   ├── migrations/             # Source of truth SQL
+│   │   ├── 001_init.sql
+│   │   ├── 002_rls_policies.sql
+│   │   └── 003_storage.sql
+│   └── docker/                 # Self-hosted Supabase stack
+│       ├── docker-compose.yml
+│       ├── .env                # never commit — copy from .env.example
+│       ├── .env.example
+│       └── volumes/
+│           ├── db/
+│           │   └── init/       # SQL copied from migrations/
+│           │       ├── 00-initial-schema.sql
+│           │       ├── 01-auth.sql
+│           │       └── 02-storage.sql
+│           ├── storage/        # persisted file uploads (gitignored)
+│           └── logs/           # gitignored
+├── .dockerignore
+├── .env.local                  # never commit — frontend env
+├── .env.local.example
 ├── .gitignore
 ├── index.html
-├── tailwind.config.js
 ├── vite.config.js
 └── CLAUDE.md
 ```
@@ -139,7 +257,7 @@ loadout/
 
 ## Supabase schema
 
-Run these migrations in the Supabase SQL editor in order.
+SQL lives in `supabase/migrations/` and is copied to `supabase/docker/volumes/db/init/` for Docker.
 
 ### 001_init.sql
 ```sql
@@ -222,7 +340,6 @@ alter table kit_items enable row level security;
 alter table shoots enable row level security;
 alter table shoot_items enable row level security;
 
--- Helper function: check if current user is member of workspace
 create or replace function is_workspace_member(ws_id uuid)
 returns boolean as $$
   select exists (
@@ -231,7 +348,6 @@ returns boolean as $$
   );
 $$ language sql security definer;
 
--- Helper function: check if current user is editor or owner
 create or replace function is_workspace_editor(ws_id uuid)
 returns boolean as $$
   select exists (
@@ -302,7 +418,7 @@ create policy "uploaders can delete own images" on storage.objects
 
 ---
 
-## vite.config.js
+## vite.config.js (unchanged)
 
 ```js
 import { defineConfig } from 'vite'
@@ -336,10 +452,10 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
+            urlPattern: /^https:\/\/.*\/rest\/.*/i,
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'supabase-cache',
+              cacheName: 'api-cache',
               expiration: { maxEntries: 100, maxAgeSeconds: 86400 }
             }
           }
@@ -352,7 +468,7 @@ export default defineConfig({
 
 ---
 
-## src/lib/supabase.js
+## src/lib/supabase.js (unchanged — works with both local Docker and Azure)
 
 ```js
 import { createClient } from '@supabase/supabase-js'
@@ -366,6 +482,20 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 ---
 
 ## Build phases and PR breakdown
+
+### Phase 0b — Docker Compose (PR: chore/docker-setup)
+
+**Files to create:**
+- `supabase/docker/docker-compose.yml` — full Supabase self-hosted stack
+- `supabase/docker/.env.example` — template with all required vars
+- `supabase/docker/volumes/db/init/00-initial-schema.sql` — copy of 001_init.sql
+- `supabase/docker/volumes/db/init/01-auth.sql` — copy of 002_rls_policies.sql
+- `supabase/docker/volumes/db/init/02-storage.sql` — copy of 003_storage.sql
+- Update `.gitignore` to exclude `supabase/docker/.env` and `supabase/docker/volumes/storage/` and `supabase/docker/volumes/logs/`
+
+**Note:** Use official Supabase self-hosted Docker Compose from https://github.com/supabase/supabase/blob/master/docker/docker-compose.yml as base — do not invent service configs.
+
+---
 
 ### Phase 1 — Auth + workspace (PRs 1–3)
 
@@ -469,6 +599,30 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 ---
 
+## Azure deployment path (future)
+
+When ready to deploy backend to Azure:
+
+1. Build Docker images: `docker compose build`
+2. Tag and push to Azure Container Registry:
+   ```bash
+   az acr login --name <registry-name>
+   docker tag supabase/postgres <registry>.azurecr.io/loadout/postgres:latest
+   # repeat for each service
+   docker push <registry>.azurecr.io/loadout/postgres:latest
+   ```
+3. Deploy to Azure Container Apps using the same `docker-compose.yml` as base (Azure supports Compose-to-Container-Apps via `az containerapp compose`)
+4. Update `VITE_SUPABASE_URL` in Vercel to point at Azure API gateway URL
+5. Update `ADDITIONAL_REDIRECT_URLS` in GoTrue env to include Vercel production URL
+
+**Azure services needed:**
+- Azure Container Registry (store images)
+- Azure Container Apps (run containers — serverless, scales to zero)
+- Azure Database for PostgreSQL Flexible Server (optional — replace container Postgres with managed DB for prod)
+- Azure Storage (optional — replace Supabase storage container with Azure Blob Storage)
+
+---
+
 ## Design guidelines
 
 - Dark-first UI: background `#0f0f0f`, surfaces `#1a1a1a`, borders `#2a2a2a`
@@ -497,10 +651,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 ---
 
-## Deployment
+## Deployment — frontend
 
 1. Push to GitHub (all via PRs after initial scaffold)
 2. Connect repo to Vercel — auto-deploys on merge to main
-3. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to Vercel environment variables
+3. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to Vercel environment variables (pointing at Azure when ready)
 4. Enable Vercel preview deployments — each open PR gets its own preview URL
-
