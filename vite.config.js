@@ -29,10 +29,10 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
+            urlPattern: /^https?:\/\/.*\/rest\/.*/i,
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'supabase-cache',
+              cacheName: 'api-cache',
               expiration: { maxEntries: 100, maxAgeSeconds: 86400 }
             }
           }
