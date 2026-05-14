@@ -30,6 +30,21 @@
 - Full directory structure scaffolded
 - GitHub repo created and pushed to `main`
 
+### Open architectural decision — MUST ASK before starting any backend work
+
+> Recorded: 2026-05-15
+
+The plan (PR #1 `chore/update-plan`) moves the backend to a **self-hosted Supabase stack** (GoTrue + PostgREST + Kong + Storage + Realtime) running in Docker Compose, with `@supabase/supabase-js` as the frontend client.
+
+The developer has not decided whether to keep this approach or **drop the Supabase tooling layer entirely** and use plain PostgreSQL with a custom API (e.g. a lightweight Node/Express or Hono backend instead of PostgREST, and a different auth solution instead of GoTrue).
+
+**Before starting any backend or auth work, ask the developer:**
+> "Have you decided whether to keep the self-hosted Supabase stack (GoTrue + PostgREST in Docker) or replace it with plain PostgreSQL and a custom API? This affects Phase 0b, Phase 1 (auth), and the frontend client library."
+
+Do not proceed with Phase 0b (`chore/docker-setup`) or Phase 1 (auth) until this is settled.
+
+---
+
 ### Starting a new session — instructions for Claude Code
 Read this file in full, then check the status tracker above to find the next `⬜ **Next**` PR. Follow the Git discipline section exactly (branch → commits → PR → stop, do not merge).
 
